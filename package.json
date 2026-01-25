@@ -1,5 +1,5 @@
 {
-  "name": "drift",
+  "name": "@bkincz/drift",
   "version": "1.0.0",
   "type": "module",
   "description": "A DOM-driven form library that automatically tracks forms and fields based on their presence in the DOM.",
