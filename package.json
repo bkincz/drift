@@ -7,12 +7,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bkincz/clutch.git"
+    "url": "https://github.com/bkincz/drift.git"
   },
   "bugs": {
-    "url": "https://github.com/bkincz/clutch/issues"
+    "url": "https://github.com/bkincz/drift/issues"
   },
-  "homepage": "https://github.com/bkincz/clutch#readme",
+  "homepage": "https://github.com/bkincz/drift#readme",
   "main": "./dist/drift.umd.cjs",
   "module": "./dist/drift.js",
   "types": "./dist/index.d.ts",
