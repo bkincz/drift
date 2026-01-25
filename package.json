@@ -3,8 +3,16 @@
   "version": "1.0.0",
   "type": "module",
   "description": "A DOM-driven form library that automatically tracks forms and fields based on their presence in the DOM.",
-  "author": "",
+  "author": "Benjamin Kinczel <beni.kinczel@gmail.com>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bkincz/clutch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bkincz/clutch/issues"
+  },
+  "homepage": "https://github.com/bkincz/clutch#readme",
   "main": "./dist/drift.umd.cjs",
   "module": "./dist/drift.js",
   "types": "./dist/index.d.ts",
