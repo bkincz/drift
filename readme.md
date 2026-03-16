@@ -109,6 +109,8 @@ drift.registerSchema('signup', {
 })
 ```
 
+Fields with active errors revalidate on any value change, including programmatic updates from JavaScript. This means linked fields — where one field's value is derived from another — will clear their errors automatically without any extra wiring.
+
 ### State Persistence
 
 Values are remembered when fields are removed and re-added.

@@ -137,6 +137,7 @@ export class Drift {
 	private formElements: Map<string, HTMLFormElement> = new Map()
 	private submitHandlers: Map<string, DriftSubmitHandler> = new Map()
 	private debounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
+	private suppressedElements: Set<DriftInputElement> = new Set()
 
 	constructor(config: DriftConfig = {}) {
 		this.config = { ...DEFAULT_CONFIG, ...config }
@@ -233,7 +234,7 @@ export class Drift {
 
 		const element = this.fieldElements.get(formKey)?.get(fieldName)
 		if (element) {
-			setInputValue(element, value)
+			this.setInputValueInternal(element, value)
 		}
 
 		this.emitEvent({ type: 'field:change', formKey, fieldName, value })
@@ -259,7 +260,7 @@ export class Drift {
 		for (const [fieldName, value] of Object.entries(values)) {
 			const element = this.fieldElements.get(formKey)?.get(fieldName)
 			if (element) {
-				setInputValue(element, value)
+				this.setInputValueInternal(element, value)
 			}
 		}
 	}
@@ -347,7 +348,7 @@ export class Drift {
 		const fields = this.fieldElements.get(formKey)
 		if (fields) {
 			for (const element of fields.values()) {
-				setInputValue(element, '')
+				this.setInputValueInternal(element, '')
 			}
 		}
 	}
@@ -581,7 +582,7 @@ export class Drift {
 						value
 					) as Record<string, unknown>
 				} else if (!isEmpty(existingValue)) {
-					setInputValue(field, existingValue)
+					this.setInputValueInternal(field, existingValue)
 				}
 			}
 		})
@@ -648,6 +649,8 @@ export class Drift {
 
 		field.addEventListener('blur', handleBlur)
 		field.addEventListener('focus', handleFocus)
+
+		this.watchForProgrammaticChanges(field)
 	}
 
 	private triggerFieldValidation(
@@ -659,8 +662,9 @@ export class Drift {
 		if (!fieldSchema) return
 
 		const trigger = fieldSchema.validateOn
+		const hasErrors = (this.getForm(formKey)?.errors[fieldName]?.length ?? 0) > 0
 
-		if (trigger === eventType) {
+		if (trigger === eventType || (eventType === 'change' && hasErrors)) {
 			this.validateField(formKey, fieldName)
 		} else if (typeof trigger === 'object' && 'debounce' in trigger && eventType === 'change') {
 			this.debouncedValidation(formKey, fieldName, trigger.debounce)
@@ -681,6 +685,40 @@ export class Drift {
 		}, delayMs)
 
 		this.debounceTimers.set(key, timer)
+	}
+
+	private setInputValueInternal(element: DriftInputElement, value: unknown): void {
+		this.suppressedElements.add(element)
+		setInputValue(element, value)
+		this.suppressedElements.delete(element)
+	}
+
+	private watchForProgrammaticChanges(field: DriftInputElement): void {
+		const isCheckable =
+			field instanceof HTMLInputElement &&
+			(field.type === 'checkbox' || field.type === 'radio')
+		const prop = isCheckable ? 'checked' : 'value'
+
+		const proto = Object.getPrototypeOf(field)
+		const descriptor = Object.getOwnPropertyDescriptor(proto, prop)
+		if (!descriptor?.set || !descriptor?.get) return
+
+		const nativeGet = descriptor.get
+		const nativeSet = descriptor.set
+
+		Object.defineProperty(field, prop, {
+			get: () => nativeGet.call(field),
+			set: (newValue: unknown) => {
+				const oldValue = nativeGet.call(field)
+				nativeSet.call(field, newValue)
+				if (oldValue !== newValue && !this.suppressedElements.has(field)) {
+					field.dispatchEvent(
+						new Event(isCheckable ? 'change' : 'input', { bubbles: true })
+					)
+				}
+			},
+			configurable: true,
+		})
 	}
 
 	private clearDebounceTimersForForm(formKey: string): void {

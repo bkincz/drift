@@ -615,6 +615,126 @@ describe('Drift - Event Listeners', () => {
 })
 
 /*
+ *   PROGRAMMATIC REVALIDATION TESTS
+ ***************************************************************************************************/
+describe('Drift - Programmatic Revalidation', () => {
+	let nameInput: HTMLInputElement
+	let keyInput: HTMLInputElement
+
+	const makeRequiredSchema = (validateOn: 'change' | 'blur'): DriftSchema => ({
+		validate: values => {
+			const errors: Record<string, string[]> = {}
+			if (!values.name) errors.name = ['Name is required']
+			if (!values.key) errors.key = ['Key is required']
+			return {
+				success: Object.keys(errors).length === 0,
+				errors: Object.keys(errors).length > 0 ? errors : undefined,
+			}
+		},
+		fields: {
+			name: {
+				validate: value => ({
+					success: typeof value === 'string' && value.length > 0,
+					errors:
+						typeof value === 'string' && value.length > 0
+							? undefined
+							: { name: ['Name is required'] },
+				}),
+				validateOn,
+			},
+			key: {
+				validate: value => ({
+					success: typeof value === 'string' && value.length > 0,
+					errors:
+						typeof value === 'string' && value.length > 0
+							? undefined
+							: { key: ['Key is required'] },
+				}),
+				validateOn,
+			},
+		},
+	})
+
+	beforeEach(async () => {
+		const form = document.createElement('form')
+		form.setAttribute('data-drift-form', 'testForm')
+
+		nameInput = document.createElement('input')
+		nameInput.name = 'name'
+		nameInput.type = 'text'
+
+		keyInput = document.createElement('input')
+		keyInput.name = 'key'
+		keyInput.type = 'text'
+
+		form.appendChild(nameInput)
+		form.appendChild(keyInput)
+		container.appendChild(form)
+
+		drift.observe(container)
+		await waitForMutations()
+	})
+
+	it('revalidates a linked field when its value is set programmatically after submission errors', async () => {
+		drift.registerSchema('testForm', makeRequiredSchema('change'))
+		nameInput.addEventListener('input', () => {
+			keyInput.value = nameInput.value.toLowerCase()
+		})
+
+		await drift.submit('testForm')
+		expect(drift.getErrors('testForm', 'name')).toContain('Name is required')
+		expect(drift.getErrors('testForm', 'key')).toContain('Key is required')
+
+		triggerInput(nameInput, 'Hello')
+		await waitForMutations()
+
+		expect(drift.getErrors('testForm', 'name')).toEqual([])
+		expect(drift.getErrors('testForm', 'key')).toEqual([])
+	})
+
+	it('revalidates a linked field even when its validateOn is blur', async () => {
+		drift.registerSchema('testForm', makeRequiredSchema('blur'))
+		nameInput.addEventListener('input', () => {
+			keyInput.value = nameInput.value.toLowerCase()
+		})
+
+		await drift.submit('testForm')
+		expect(drift.getErrors('testForm', 'key')).toContain('Key is required')
+
+		triggerInput(nameInput, 'Hello')
+		await waitForMutations()
+
+		expect(drift.getErrors('testForm', 'key')).toEqual([])
+	})
+
+	it('does not trigger validation when Drift internally sets a field value', async () => {
+		drift.registerSchema('testForm', makeRequiredSchema('change'))
+		await drift.submit('testForm')
+		expect(drift.getErrors('testForm', 'key')).toContain('Key is required')
+		const validateSpy = vi.spyOn(drift, 'validateField')
+
+		drift.setValue('testForm', 'key', 'my-key')
+		await waitForMutations()
+
+		expect(validateSpy).not.toHaveBeenCalled()
+		validateSpy.mockRestore()
+	})
+
+	it('updates Drift state when a linked field value changes programmatically', async () => {
+		drift.registerSchema('testForm', makeRequiredSchema('change'))
+
+		nameInput.addEventListener('input', () => {
+			keyInput.value = nameInput.value.toLowerCase()
+		})
+
+		triggerInput(nameInput, 'MyProject')
+		await waitForMutations()
+
+		expect(drift.getValue('testForm', 'key')).toBe('myproject')
+	})
+})
+
+/*
  *   INPUT TYPE TESTS
  ***************************************************************************************************/
 describe('Drift - Input Types', () => {
