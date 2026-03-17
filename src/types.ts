@@ -16,7 +16,8 @@ export interface DriftFieldSchema {
 		value: unknown,
 		allValues: Record<string, unknown>
 	) => ValidationResult | Promise<ValidationResult>
-	validateOn: ValidationTrigger
+	validateOn?: ValidationTrigger
+	transform?: (value: unknown) => unknown
 }
 
 export interface DriftSchema {
@@ -35,6 +36,10 @@ export interface DriftFormState {
 	isValid: boolean
 	isSubmitting: boolean
 	isValidating: boolean
+	initialValues: Record<string, unknown>
+	hasBeenValidated: boolean
+	canSubmit: boolean
+	validatingFields: Record<string, boolean>
 }
 
 export interface DriftState {
@@ -50,6 +55,7 @@ export interface DriftConfig {
 	hiddenAttribute?: string
 	persist?: boolean
 	observerDebounce?: number
+	defaultValidateOn?: ValidationTrigger
 }
 
 /*
@@ -64,6 +70,8 @@ export type DriftSubmitHandler = (
 	values: Record<string, unknown>,
 	formKey: string
 ) => void | Promise<void>
+
+export type DriftResetHandler = () => void | Promise<void>
 
 export type DriftStateCallback = (state: DriftFormState) => void
 
@@ -91,6 +99,7 @@ export interface DriftFormMeta {
 export type DriftEventType =
 	| 'form:register'
 	| 'form:unregister'
+	| 'form:reset'
 	| 'field:register'
 	| 'field:unregister'
 	| 'field:change'

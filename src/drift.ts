@@ -4,6 +4,8 @@
 import { StateMachine } from '@bkincz/clutch'
 import { DriftObserver } from './observer'
 import { SchemaRegistry } from './registry'
+import { DriftEventEmitter } from './emitter'
+import { getInputValue, setInputValue, isEmpty } from './input'
 import { setNestedValue, getNestedValue } from './parser'
 import type {
 	DriftConfig,
@@ -12,9 +14,11 @@ import type {
 	DriftSchema,
 	DriftInputElement,
 	DriftSubmitHandler,
+	DriftResetHandler,
 	DriftStateCallback,
 	DriftEvent,
 	DriftEventListener,
+	ValidationTrigger,
 } from './types'
 
 /*
@@ -25,7 +29,9 @@ class DriftStateMachine extends StateMachine<DriftState> {}
 /*
  *   CONSTANTS
  ***************************************************************************************************/
-const DEFAULT_CONFIG: Required<DriftConfig> = {
+const DEFAULT_CONFIG: Required<Omit<DriftConfig, 'defaultValidateOn'>> & {
+	defaultValidateOn?: ValidationTrigger
+} = {
 	formAttribute: 'data-drift-form',
 	nestedAttribute: 'data-drift-nested',
 	hiddenAttribute: 'data-drift-hidden',
@@ -45,79 +51,11 @@ function createEmptyFormState(): DriftFormState {
 		isValid: true,
 		isSubmitting: false,
 		isValidating: false,
+		initialValues: {},
+		hasBeenValidated: false,
+		canSubmit: false,
+		validatingFields: {},
 	}
-}
-
-function getInputValue(element: DriftInputElement): unknown {
-	if (element instanceof HTMLInputElement) {
-		switch (element.type) {
-			case 'checkbox':
-				return element.checked
-			case 'number':
-			case 'range':
-				return element.valueAsNumber
-			case 'date':
-			case 'datetime-local':
-			case 'time':
-				return element.value || null
-			case 'file':
-				return element.files
-			default:
-				return element.value
-		}
-	}
-
-	if (element instanceof HTMLSelectElement) {
-		if (element.multiple) {
-			return Array.from(element.selectedOptions).map(opt => opt.value)
-		}
-		return element.value
-	}
-
-	return element.value
-}
-
-function setInputValue(element: DriftInputElement, value: unknown): void {
-	if (element instanceof HTMLInputElement) {
-		switch (element.type) {
-			case 'checkbox':
-				element.checked = Boolean(value)
-				break
-			case 'number':
-			case 'range':
-				element.value = String(value ?? '')
-				break
-			case 'radio':
-				element.checked = element.value === String(value)
-				break
-			default:
-				element.value = String(value ?? '')
-		}
-		return
-	}
-
-	if (element instanceof HTMLSelectElement) {
-		if (element.multiple && Array.isArray(value)) {
-			for (const option of element.options) {
-				option.selected = value.includes(option.value)
-			}
-		} else {
-			element.value = String(value ?? '')
-		}
-		return
-	}
-
-	element.value = String(value ?? '')
-}
-
-function isEmpty(value: unknown): boolean {
-	if (value === undefined || value === null || value === '') {
-		return true
-	}
-	if (Array.isArray(value) && value.length === 0) {
-		return true
-	}
-	return false
 }
 
 /*
@@ -128,16 +66,20 @@ function isEmpty(value: unknown): boolean {
  * state management, validation, and event handling
  */
 export class Drift {
-	private config: Required<DriftConfig>
+	private config: Required<Omit<DriftConfig, 'defaultValidateOn'>> & {
+		defaultValidateOn?: ValidationTrigger
+	}
 	private state: DriftStateMachine
 	private observer: DriftObserver
 	private registry: SchemaRegistry
-	private eventListeners: Map<string, Set<DriftEventListener>> = new Map()
+	private emitter: DriftEventEmitter = new DriftEventEmitter()
 	private fieldElements: Map<string, Map<string, DriftInputElement>> = new Map()
 	private formElements: Map<string, HTMLFormElement> = new Map()
 	private submitHandlers: Map<string, DriftSubmitHandler> = new Map()
+	private resetHandlers: Map<string, DriftResetHandler> = new Map()
 	private debounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
 	private suppressedElements: Set<DriftInputElement> = new Set()
+	private radioGroups: Map<string, Map<string, Set<HTMLInputElement>>> = new Map()
 
 	constructor(config: DriftConfig = {}) {
 		this.config = { ...DEFAULT_CONFIG, ...config }
@@ -234,7 +176,7 @@ export class Drift {
 
 		const element = this.fieldElements.get(formKey)?.get(fieldName)
 		if (element) {
-			this.setInputValueInternal(element, value)
+			this.setInputValueInternal(element, value, formKey)
 		}
 
 		this.emitEvent({ type: 'field:change', formKey, fieldName, value })
@@ -260,7 +202,7 @@ export class Drift {
 		for (const [fieldName, value] of Object.entries(values)) {
 			const element = this.fieldElements.get(formKey)?.get(fieldName)
 			if (element) {
-				this.setInputValueInternal(element, value)
+				this.setInputValueInternal(element, value, formKey)
 			}
 		}
 	}
@@ -295,6 +237,8 @@ export class Drift {
 			}
 
 			draft.forms[formKey].isValid = Object.keys(draft.forms[formKey].errors).length === 0
+			draft.forms[formKey].canSubmit =
+				draft.forms[formKey].hasBeenValidated && draft.forms[formKey].isValid
 		})
 	}
 
@@ -307,6 +251,8 @@ export class Drift {
 
 			draft.forms[formKey].errors = { ...draft.forms[formKey].errors, ...errors }
 			draft.forms[formKey].isValid = Object.keys(draft.forms[formKey].errors).length === 0
+			draft.forms[formKey].canSubmit =
+				draft.forms[formKey].hasBeenValidated && draft.forms[formKey].isValid
 		})
 	}
 
@@ -336,21 +282,79 @@ export class Drift {
 	}
 
 	/**
-	 * Reset a form to its initial state
+	 * Set initial values for a form
 	 */
-	resetForm(formKey: string): void {
+	setInitialValues(formKey: string, values: Record<string, unknown>): void {
 		this.state.mutate(draft => {
 			if (!draft.forms[formKey]) return
 
-			draft.forms[formKey] = createEmptyFormState()
+			draft.forms[formKey].initialValues = { ...values }
+
+			for (const [fieldName, value] of Object.entries(values)) {
+				draft.forms[formKey].values = setNestedValue(
+					draft.forms[formKey].values,
+					fieldName,
+					value
+				) as Record<string, unknown>
+				delete draft.forms[formKey].dirty[fieldName]
+			}
 		})
 
 		const fields = this.fieldElements.get(formKey)
 		if (fields) {
-			for (const element of fields.values()) {
-				this.setInputValueInternal(element, '')
+			for (const [fieldName, value] of Object.entries(values)) {
+				const element = fields.get(fieldName)
+				if (element) {
+					this.setInputValueInternal(element, value, formKey)
+				}
 			}
 		}
+	}
+
+	/**
+	 * Reset a form to its initial state
+	 */
+	async resetForm(formKey: string): Promise<void> {
+		const form = this.getForm(formKey)
+		if (!form) return
+
+		const initialValues = { ...form.initialValues }
+
+		this.state.mutate(draft => {
+			if (!draft.forms[formKey]) return
+
+			const empty = createEmptyFormState()
+			draft.forms[formKey].values = { ...initialValues }
+			draft.forms[formKey].errors = empty.errors
+			draft.forms[formKey].touched = empty.touched
+			draft.forms[formKey].dirty = empty.dirty
+			draft.forms[formKey].isValid = empty.isValid
+			draft.forms[formKey].isSubmitting = empty.isSubmitting
+			draft.forms[formKey].isValidating = empty.isValidating
+			draft.forms[formKey].hasBeenValidated = empty.hasBeenValidated
+			draft.forms[formKey].canSubmit = empty.canSubmit
+			draft.forms[formKey].validatingFields = empty.validatingFields
+			draft.forms[formKey].initialValues = initialValues
+		})
+
+		const fields = this.fieldElements.get(formKey)
+		if (fields) {
+			for (const [fieldName, element] of fields.entries()) {
+				const value = initialValues[fieldName] ?? ''
+				this.setInputValueInternal(element, value, formKey)
+			}
+		}
+
+		const resetHandler = this.resetHandlers.get(formKey)
+		if (resetHandler) {
+			try {
+				await resetHandler()
+			} catch (error) {
+				console.error(`[Drift] Reset handler error for form "${formKey}":`, error)
+			}
+		}
+
+		this.emitEvent({ type: 'form:reset', formKey })
 	}
 
 	/**
@@ -362,8 +366,12 @@ export class Drift {
 
 		const value = getNestedValue(form.values, fieldName)
 
-		this.emitEvent({ type: 'validation:start', formKey, fieldName })
+		this.state.mutate(draft => {
+			if (!draft.forms[formKey]) return
+			draft.forms[formKey].validatingFields[fieldName] = true
+		})
 
+		this.emitEvent({ type: 'validation:start', formKey, fieldName })
 		const result = await this.registry.validateField(formKey, fieldName, value, form.values)
 
 		this.state.mutate(draft => {
@@ -372,13 +380,15 @@ export class Drift {
 			if (result.success) {
 				delete draft.forms[formKey].errors[fieldName]
 			} else if (result.errors) {
-				const fieldErrors = result.errors[fieldName]
-				if (fieldErrors) {
-					draft.forms[formKey].errors[fieldName] = fieldErrors
+				for (const [key, errs] of Object.entries(result.errors)) {
+					if (errs?.length) draft.forms[formKey].errors[key] = errs
 				}
 			}
 
 			draft.forms[formKey].isValid = Object.keys(draft.forms[formKey].errors).length === 0
+			draft.forms[formKey].canSubmit =
+				draft.forms[formKey].hasBeenValidated && draft.forms[formKey].isValid
+			draft.forms[formKey].validatingFields[fieldName] = false
 		})
 
 		this.emitEvent({
@@ -405,8 +415,6 @@ export class Drift {
 		})
 
 		this.emitEvent({ type: 'validation:start', formKey })
-
-		// Run form-level validation
 		const result = await this.registry.validateForm(formKey, form.values)
 
 		this.state.mutate(draft => {
@@ -420,6 +428,8 @@ export class Drift {
 
 			draft.forms[formKey].isValid = Object.keys(draft.forms[formKey].errors).length === 0
 			draft.forms[formKey].isValidating = false
+			draft.forms[formKey].hasBeenValidated = true
+			draft.forms[formKey].canSubmit = draft.forms[formKey].isValid
 		})
 
 		this.emitEvent({ type: 'validation:end', formKey })
@@ -433,6 +443,14 @@ export class Drift {
 	onSubmit(formKey: string, handler: DriftSubmitHandler): () => void {
 		this.submitHandlers.set(formKey, handler)
 		return () => this.submitHandlers.delete(formKey)
+	}
+
+	/**
+	 * Register a reset handler for a form
+	 */
+	onReset(formKey: string, handler: DriftResetHandler): () => void {
+		this.resetHandlers.set(formKey, handler)
+		return () => this.resetHandlers.delete(formKey)
 	}
 
 	/**
@@ -507,18 +525,14 @@ export class Drift {
 	 * Add an event listener
 	 */
 	on(event: string, listener: DriftEventListener): () => void {
-		if (!this.eventListeners.has(event)) {
-			this.eventListeners.set(event, new Set())
-		}
-		this.eventListeners.get(event)!.add(listener)
-		return () => this.eventListeners.get(event)?.delete(listener)
+		return this.emitter.on(event, listener)
 	}
 
 	/**
 	 * Remove an event listener
 	 */
 	off(event: string, listener: DriftEventListener): void {
-		this.eventListeners.get(event)?.delete(listener)
+		this.emitter.off(event, listener)
 	}
 
 	/*
@@ -527,6 +541,7 @@ export class Drift {
 	private handleFormAdded(form: HTMLFormElement, formKey: string): void {
 		this.formElements.set(formKey, form)
 		this.fieldElements.set(formKey, new Map())
+		this.radioGroups.set(formKey, new Map())
 
 		this.state.mutate(draft => {
 			if (!draft.forms[formKey]) {
@@ -539,12 +554,18 @@ export class Drift {
 			this.submit(formKey)
 		})
 
+		form.addEventListener('reset', e => {
+			e.preventDefault()
+			this.resetForm(formKey)
+		})
+
 		this.emitEvent({ type: 'form:register', formKey })
 	}
 
 	private handleFormRemoved(_form: HTMLFormElement, formKey: string): void {
 		this.formElements.delete(formKey)
 		this.fieldElements.delete(formKey)
+		this.radioGroups.delete(formKey)
 		this.clearDebounceTimersForForm(formKey)
 		this.emitEvent({ type: 'form:unregister', formKey })
 	}
@@ -557,22 +578,48 @@ export class Drift {
 		const fieldMap = this.fieldElements.get(formKey)
 		if (!fieldMap) return
 
+		for (const field of fields) {
+			if (!field.name) continue
+
+			if (field instanceof HTMLInputElement && field.type === 'radio') {
+				const formRadioGroups = this.radioGroups.get(formKey)
+				if (formRadioGroups) {
+					if (!formRadioGroups.has(field.name)) {
+						formRadioGroups.set(field.name, new Set())
+					}
+					formRadioGroups.get(field.name)!.add(field)
+				}
+				if (!fieldMap.has(field.name)) {
+					fieldMap.set(field.name, field)
+				}
+			} else {
+				fieldMap.set(field.name, field)
+			}
+		}
+
 		const fieldData: Array<{ field: DriftInputElement; name: string; value: unknown }> = []
+		const processedNames = new Set<string>()
 
 		for (const field of fields) {
 			if (!field.name) continue
-			fieldMap.set(field.name, field)
-			fieldData.push({
-				field,
-				name: field.name,
-				value: getInputValue(field),
-			})
+			if (processedNames.has(field.name)) continue
+			processedNames.add(field.name)
+
+			let value: unknown
+			if (field instanceof HTMLInputElement && field.type === 'radio') {
+				const group = this.radioGroups.get(formKey)?.get(field.name)
+				value = group ? (Array.from(group).find(el => el.checked)?.value ?? null) : null
+			} else {
+				value = getInputValue(field)
+			}
+
+			fieldData.push({ field, name: field.name, value })
 		}
 
 		this.state.mutate(draft => {
 			if (!draft.forms[formKey]) return
 
-			for (const { field, name, value } of fieldData) {
+			for (const { name, value } of fieldData) {
 				const existingValue = getNestedValue(draft.forms[formKey].values, name)
 
 				if (isEmpty(existingValue) && !isEmpty(value)) {
@@ -582,13 +629,28 @@ export class Drift {
 						value
 					) as Record<string, unknown>
 				} else if (!isEmpty(existingValue)) {
-					this.setInputValueInternal(field, existingValue)
+					const el = fieldMap.get(name)
+					const isRadio = el instanceof HTMLInputElement && el.type === 'radio'
+					if (isRadio) {
+						const group = this.radioGroups.get(formKey)?.get(name)
+						if (group) {
+							for (const radioEl of group) {
+								this.setInputValueInternal(radioEl, existingValue, formKey)
+							}
+						}
+					} else if (el) {
+						this.setInputValueInternal(el, existingValue, formKey)
+					}
 				}
 			}
 		})
 
-		for (const { field, name, value } of fieldData) {
-			this.attachFieldListeners(field, formKey, name)
+		for (const field of fields) {
+			if (!field.name) continue
+			this.attachFieldListeners(field, formKey, field.name)
+		}
+
+		for (const { name, value } of fieldData) {
 			this.emitEvent({ type: 'field:register', formKey, fieldName: name, value })
 		}
 	}
@@ -599,6 +661,20 @@ export class Drift {
 		formKey: string
 	): void {
 		const fieldName = field.name
+
+		if (field instanceof HTMLInputElement && field.type === 'radio') {
+			const group = this.radioGroups.get(formKey)?.get(fieldName)
+			if (group) {
+				group.delete(field)
+				if (group.size === 0) {
+					this.radioGroups.get(formKey)?.delete(fieldName)
+					if (this.radioGroups.get(formKey)?.size === 0) {
+						this.radioGroups.delete(formKey)
+					}
+				}
+			}
+		}
+
 		if (fieldName) {
 			this.emitEvent({ type: 'field:unregister', formKey, fieldName })
 		}
@@ -609,8 +685,25 @@ export class Drift {
 		formKey: string,
 		fieldName: string
 	): void {
+		const isRadio = field instanceof HTMLInputElement && field.type === 'radio'
+
 		const handleChange = () => {
-			const value = getInputValue(field)
+			if (this.suppressedElements.has(field)) return
+
+			let value: unknown
+			if (isRadio) {
+				const group = this.radioGroups.get(formKey)?.get(fieldName)
+				value = group
+					? (Array.from(group).find(el => el.checked)?.value ?? null)
+					: getInputValue(field)
+			} else {
+				value = getInputValue(field)
+			}
+
+			const fieldSchema = this.registry.getFieldSchema(formKey, fieldName)
+			if (fieldSchema?.transform) {
+				value = fieldSchema.transform(value)
+			}
 
 			this.state.mutate(draft => {
 				if (!draft.forms[formKey]) return
@@ -641,7 +734,7 @@ export class Drift {
 			this.emitEvent({ type: 'field:focus', formKey, fieldName })
 		}
 
-		if (field instanceof HTMLSelectElement) {
+		if (isRadio || field instanceof HTMLSelectElement) {
 			field.addEventListener('change', handleChange)
 		} else {
 			field.addEventListener('input', handleChange)
@@ -659,12 +752,12 @@ export class Drift {
 		eventType: 'change' | 'blur'
 	): void {
 		const fieldSchema = this.registry.getFieldSchema(formKey, fieldName)
-		if (!fieldSchema) return
-
-		const trigger = fieldSchema.validateOn
+		const trigger = fieldSchema?.validateOn ?? this.config.defaultValidateOn
 		const hasErrors = (this.getForm(formKey)?.errors[fieldName]?.length ?? 0) > 0
 
-		if (trigger === eventType || (eventType === 'change' && hasErrors)) {
+		if (trigger === undefined && !hasErrors) return
+
+		if (trigger === eventType || hasErrors) {
 			this.validateField(formKey, fieldName)
 		} else if (typeof trigger === 'object' && 'debounce' in trigger && eventType === 'change') {
 			this.debouncedValidation(formKey, fieldName, trigger.debounce)
@@ -687,7 +780,23 @@ export class Drift {
 		this.debounceTimers.set(key, timer)
 	}
 
-	private setInputValueInternal(element: DriftInputElement, value: unknown): void {
+	private setInputValueInternal(
+		element: DriftInputElement,
+		value: unknown,
+		formKey?: string
+	): void {
+		if (formKey && element instanceof HTMLInputElement && element.type === 'radio') {
+			const group = this.radioGroups.get(formKey)?.get(element.name)
+			if (group) {
+				for (const el of group) {
+					this.suppressedElements.add(el)
+					el.checked = el.value === String(value ?? '')
+					this.suppressedElements.delete(el)
+				}
+				return
+			}
+		}
+
 		this.suppressedElements.add(element)
 		setInputValue(element, value)
 		this.suppressedElements.delete(element)
@@ -738,18 +847,6 @@ export class Drift {
 	}
 
 	private emitEvent(event: DriftEvent): void {
-		const listeners = this.eventListeners.get(event.type)
-		if (listeners) {
-			for (const listener of listeners) {
-				listener(event)
-			}
-		}
-
-		const wildcardListeners = this.eventListeners.get('*')
-		if (wildcardListeners) {
-			for (const listener of wildcardListeners) {
-				listener(event)
-			}
-		}
+		this.emitter.emit(event)
 	}
 }

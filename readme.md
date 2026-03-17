@@ -31,6 +31,7 @@ drift.observe(document.body)
 drift.subscribe('login', (state) => {
   console.log('Values:', state.values)
   console.log('Errors:', state.errors)
+  console.log('Can submit:', state.canSubmit)
 })
 
 // Handle submission
@@ -76,9 +77,11 @@ Resolves to:
 
 ### Schema Validation
 
-Register schemas with configurable validation timing.
+Register schemas with configurable validation timing. `validateOn` is optional per field — set a form-wide default via config instead.
 
 ```typescript
+const drift = new Drift({ defaultValidateOn: 'blur' })
+
 drift.registerSchema('signup', {
   // Form-level validation (runs on submit)
   validate: async (values) => {
@@ -89,7 +92,7 @@ drift.registerSchema('signup', {
     }
   },
 
-  // Field-level validation with timing
+  // Field-level validation with optional timing override
   fields: {
     email: {
       validate: (value) => ({
@@ -98,18 +101,72 @@ drift.registerSchema('signup', {
       }),
       validateOn: { debounce: 300 }  // 'blur' | 'change' | { debounce: ms }
     },
-    password: {
-      validate: (value) => ({
-        success: value.length >= 8,
-        errors: value.length >= 8 ? undefined : { password: ['Min 8 characters'] }
-      }),
-      validateOn: 'blur'
+    username: {
+      validate: (value) => ({ ... }),
+      transform: (value) => String(value).trim().toLowerCase()  // coerce before storing
     }
   }
 })
 ```
 
 Fields with active errors revalidate on any value change, including programmatic updates from JavaScript. This means linked fields — where one field's value is derived from another — will clear their errors automatically without any extra wiring.
+
+A field validator may return errors for other fields. This is useful for cross-field rules like password confirmation:
+
+```typescript
+fields: {
+  password: {
+    validate: (value, all) => value !== all.confirm
+      ? { success: false, errors: {
+          password: ['Passwords do not match'],
+          confirm:  ['Passwords do not match'],
+        }}
+      : { success: true }
+  }
+}
+```
+
+### Initial Values
+
+Seed a form with data — useful for edit forms. Fields seeded this way are not considered dirty, and `resetForm` restores to these values.
+
+```typescript
+drift.setInitialValues('profile', {
+  name: 'Alice',
+  email: 'alice@example.com',
+})
+
+// Later, user makes changes and wants to cancel
+await drift.resetForm('profile')  // restores name + email, clears errors/dirty/touched
+```
+
+### Reset Handler
+
+Hook into the reset lifecycle to clear server-side state or UI that Drift doesn't own.
+
+```typescript
+drift.onReset('profile', async () => {
+  await api.clearDraft()
+})
+```
+
+A `<button type="reset">` inside the form automatically triggers `resetForm`.
+
+### Radio Groups
+
+Radio inputs sharing a `name` are automatically treated as a single logical field.
+
+```html
+<form data-drift-form="survey">
+  <input type="radio" name="size" value="sm" />
+  <input type="radio" name="size" value="lg" />
+</form>
+```
+
+```typescript
+drift.getValue('survey', 'size')        // 'sm' | 'lg' | undefined
+drift.setValue('survey', 'size', 'lg')  // checks the matching radio
+```
 
 ### State Persistence
 
@@ -130,37 +187,46 @@ const drift = new Drift({
   formAttribute: 'data-drift-form',    // form identifier attribute
   hiddenAttribute: 'data-drift-hidden', // exclude fields from tracking
   persist: false,                       // localStorage persistence
-  observerDebounce: 16                  // mutation observer debounce (ms)
+  observerDebounce: 16,                 // mutation observer debounce (ms)
+  defaultValidateOn: 'blur',            // fallback trigger for fields without validateOn
 })
 ```
 
 ### Core Methods
 
 ```typescript
-drift.observe(element)                    // Start observing
-drift.disconnect()                        // Stop observing
+drift.observe(element)                         // Start observing
+drift.disconnect()                             // Stop observing
 
-drift.registerSchema(formKey, schema)     // Register validation
-drift.unregisterSchema(formKey)           // Remove validation
+drift.registerSchema(formKey, schema)          // Register validation
+drift.unregisterSchema(formKey)                // Remove validation
 
-drift.getForm(formKey)                    // Get form state
-drift.getValue(formKey, fieldName)        // Get field value
-drift.setValue(formKey, fieldName, value) // Set field value
-drift.setValues(formKey, values)          // Set multiple values
+drift.getForm(formKey)                         // Get form state
+drift.getValue(formKey, fieldName)             // Get field value
+drift.setValue(formKey, fieldName, value)      // Set field value
+drift.setValues(formKey, values)               // Set multiple values
+drift.setInitialValues(formKey, values)        // Seed initial values (not dirty)
 
-drift.getErrors(formKey, fieldName)       // Get field errors
-drift.getAllErrors(formKey)               // Get all form errors
-drift.setErrors(formKey, errors)          // Set errors
-drift.clearErrors(formKey, fieldName?)    // Clear errors
+drift.getErrors(formKey, fieldName)            // Get field errors
+drift.getAllErrors(formKey)                    // Get all form errors
+drift.setErrors(formKey, errors)               // Set errors
+drift.clearErrors(formKey, fieldName?)         // Clear errors
 
-drift.validateField(formKey, fieldName)   // Validate single field
-drift.validateForm(formKey)               // Validate entire form
-drift.submit(formKey)                     // Programmatic submit
+drift.validateField(formKey, fieldName)        // Validate single field
+drift.validateForm(formKey)                    // Validate entire form
+drift.submit(formKey)                          // Programmatic submit
 
-drift.resetForm(formKey)                  // Reset to initial state
-drift.isTouched(formKey, fieldName)       // Check if touched
-drift.isDirty(formKey, fieldName)         // Check if dirty
-drift.isFormDirty(formKey)                // Check if form is dirty
+drift.resetForm(formKey)                       // Reset to initial state (async)
+drift.isTouched(formKey, fieldName)            // Check if touched
+drift.isDirty(formKey, fieldName)              // Check if dirty
+drift.isFormDirty(formKey)                     // Check if form is dirty
+```
+
+### Handlers
+
+```typescript
+drift.onSubmit(formKey, async (values) => { ... })   // returns unsubscribe fn
+drift.onReset(formKey, async () => { ... })          // returns unsubscribe fn
 ```
 
 ### Subscriptions
@@ -168,7 +234,8 @@ drift.isFormDirty(formKey)                // Check if form is dirty
 ```typescript
 // Subscribe to form state
 const unsubscribe = drift.subscribe(formKey, (state) => {
-  // state: { values, errors, touched, dirty, isValid, isSubmitting, isValidating }
+  // state: { values, errors, touched, dirty, isValid, isSubmitting, isValidating,
+  //          initialValues, hasBeenValidated, canSubmit, validatingFields }
 })
 
 // Subscribe to all forms
@@ -179,9 +246,25 @@ drift.on('field:change', (event) => { ... })
 drift.on('form:register', (event) => { ... })
 ```
 
+### Form State
+
+| Property | Type | Description |
+|---|---|---|
+| `values` | `Record<string, unknown>` | Current field values |
+| `errors` | `Record<string, string[]>` | Active validation errors |
+| `touched` | `Record<string, boolean>` | Fields that have been blurred |
+| `dirty` | `Record<string, boolean>` | Fields that have been changed |
+| `isValid` | `boolean` | No active errors |
+| `isSubmitting` | `boolean` | Submit in progress |
+| `isValidating` | `boolean` | Form-level validation in progress |
+| `validatingFields` | `Record<string, boolean>` | Per-field validation in progress |
+| `initialValues` | `Record<string, unknown>` | Values set via `setInitialValues` |
+| `hasBeenValidated` | `boolean` | Form has been validated at least once |
+| `canSubmit` | `boolean` | `hasBeenValidated && isValid` |
+
 ### Events
 
-- `form:register` / `form:unregister`
+- `form:register` / `form:unregister` / `form:reset`
 - `field:register` / `field:unregister`
 - `field:change` / `field:blur` / `field:focus`
 - `validation:start` / `validation:end`
@@ -198,7 +281,13 @@ drift.on('form:register', (event) => { ... })
 Fully typed with exports for all interfaces.
 
 ```typescript
-import type { DriftFormState, DriftSchema, ValidationResult } from '@bkincz/drift'
+import type {
+  DriftFormState,
+  DriftSchema,
+  DriftFieldSchema,
+  DriftResetHandler,
+  ValidationResult,
+} from '@bkincz/drift'
 ```
 
 ## License
