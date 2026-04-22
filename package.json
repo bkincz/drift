@@ -1,6 +1,6 @@
 {
   "name": "@bkincz/drift",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "type": "module",
   "description": "A DOM-driven form library that automatically tracks forms and fields based on their presence in the DOM.",
   "author": "Benjamin Kinczel <beni.kinczel@gmail.com>",
