@@ -246,11 +246,7 @@ export class DriftObserver {
 		this.callbacks.onFieldsAdded([field], form, formKey)
 	}
 
-	private unregisterField(
-		field: DriftInputElement,
-		form: Element,
-		formKey: string
-	): void {
+	private unregisterField(field: DriftInputElement, form: Element, formKey: string): void {
 		this.trackedFields.delete(field)
 		this.callbacks.onFieldRemoved(field, form, formKey)
 	}

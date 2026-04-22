@@ -570,11 +570,7 @@ export class Drift {
 		this.emitEvent({ type: 'form:unregister', formKey })
 	}
 
-	private handleFieldsAdded(
-		fields: DriftInputElement[],
-		_form: Element,
-		formKey: string
-	): void {
+	private handleFieldsAdded(fields: DriftInputElement[], _form: Element, formKey: string): void {
 		const fieldMap = this.fieldElements.get(formKey)
 		if (!fieldMap) return
 
@@ -655,11 +651,7 @@ export class Drift {
 		}
 	}
 
-	private handleFieldRemoved(
-		field: DriftInputElement,
-		_form: Element,
-		formKey: string
-	): void {
+	private handleFieldRemoved(field: DriftInputElement, _form: Element, formKey: string): void {
 		const fieldName = field.name
 
 		if (field instanceof HTMLInputElement && field.type === 'radio') {
