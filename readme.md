@@ -21,6 +21,14 @@ npm install @bkincz/drift
 </form>
 ```
 
+> **Note:** `data-drift-form` works on any element, not just `<form>`. Use a `<div>` or other container when a native form element would conflict (e.g. nested inside an existing `<form>`).
+>
+> ```html
+> <div data-drift-form="checkout">
+>   <input name="card_number" />
+> </div>
+> ```
+
 ```typescript
 import { Drift } from '@bkincz/drift'
 
@@ -44,7 +52,7 @@ drift.onSubmit('login', async (values) => {
 
 ### Automatic Registration
 
-Forms and fields are tracked automatically based on DOM presence.
+Forms and fields are tracked automatically based on DOM presence. The `data-drift-form` attribute can be placed on any element — `<form>`, `<div>`, `<section>`, etc.
 
 ```html
 <!-- Field in DOM = registered -->

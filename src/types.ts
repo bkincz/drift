@@ -87,7 +87,7 @@ export interface DriftFieldMeta {
 }
 
 export interface DriftFormMeta {
-	element: HTMLFormElement
+	element: Element
 	formKey: string
 	fields: Map<string, DriftFieldMeta>
 	submitHandler?: DriftSubmitHandler

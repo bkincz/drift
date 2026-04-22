@@ -74,7 +74,7 @@ export class Drift {
 	private registry: SchemaRegistry
 	private emitter: DriftEventEmitter = new DriftEventEmitter()
 	private fieldElements: Map<string, Map<string, DriftInputElement>> = new Map()
-	private formElements: Map<string, HTMLFormElement> = new Map()
+	private formElements: Map<string, Element> = new Map()
 	private submitHandlers: Map<string, DriftSubmitHandler> = new Map()
 	private resetHandlers: Map<string, DriftResetHandler> = new Map()
 	private debounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
@@ -538,7 +538,7 @@ export class Drift {
 	/*
 	 *   PRIVATE METHODS
 	 ************************************************************************************************/
-	private handleFormAdded(form: HTMLFormElement, formKey: string): void {
+	private handleFormAdded(form: Element, formKey: string): void {
 		this.formElements.set(formKey, form)
 		this.fieldElements.set(formKey, new Map())
 		this.radioGroups.set(formKey, new Map())
@@ -562,7 +562,7 @@ export class Drift {
 		this.emitEvent({ type: 'form:register', formKey })
 	}
 
-	private handleFormRemoved(_form: HTMLFormElement, formKey: string): void {
+	private handleFormRemoved(_form: Element, formKey: string): void {
 		this.formElements.delete(formKey)
 		this.fieldElements.delete(formKey)
 		this.radioGroups.delete(formKey)
@@ -572,7 +572,7 @@ export class Drift {
 
 	private handleFieldsAdded(
 		fields: DriftInputElement[],
-		_form: HTMLFormElement,
+		_form: Element,
 		formKey: string
 	): void {
 		const fieldMap = this.fieldElements.get(formKey)
@@ -657,7 +657,7 @@ export class Drift {
 
 	private handleFieldRemoved(
 		field: DriftInputElement,
-		_form: HTMLFormElement,
+		_form: Element,
 		formKey: string
 	): void {
 		const fieldName = field.name
