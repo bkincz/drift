@@ -159,3 +159,43 @@ describe('isHidden', () => {
 		expect(isHidden(element)).toBe(true)
 	})
 })
+
+/*
+ *   NESTED CONTAINER TESTS
+ ***************************************************************************************************/
+describe('getInputs - Nested containers', () => {
+	it('leaves a nested container its own fields', () => {
+		const outer = document.createElement('div')
+		outer.setAttribute('data-drift-form', 'outer')
+		outer.innerHTML =
+			'<input name="a" /><div data-drift-form="inner"><input name="b" /></div>'
+
+		expect(getInputs(outer).map(input => input.name)).toEqual(['a'])
+	})
+
+	it('gives the nested container the fields the outer one let go', () => {
+		const outer = document.createElement('div')
+		outer.setAttribute('data-drift-form', 'outer')
+		outer.innerHTML =
+			'<input name="a" /><div data-drift-form="inner"><input name="b" /></div>'
+		const inner = outer.querySelector('[data-drift-form="inner"]')!
+
+		expect(getInputs(inner).map(input => input.name)).toEqual(['b'])
+	})
+
+	it('still reaches through plain wrappers', () => {
+		const container = document.createElement('div')
+		container.setAttribute('data-drift-form', 'outer')
+		container.innerHTML = '<div><fieldset><input name="deep" /></fieldset></div>'
+
+		expect(getInputs(container).map(input => input.name)).toEqual(['deep'])
+	})
+
+	it('honours a custom form attribute', () => {
+		const outer = document.createElement('div')
+		outer.setAttribute('data-form', 'outer')
+		outer.innerHTML = '<input name="a" /><div data-form="inner"><input name="b" /></div>'
+
+		expect(getInputs(outer, 'data-drift-hidden', 'data-form').map(i => i.name)).toEqual(['a'])
+	})
+})

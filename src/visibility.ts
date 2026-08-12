@@ -6,16 +6,31 @@ import type { DriftInputElement } from './types'
 /*
  *   VISIBILITY UTILITIES
  ***************************************************************************************************/
-/**
- * Get all visible input elements within a container
- */
+const FIELDS = 'input, textarea, select'
+
+function claimedByNested(container: Element, formAttribute: string): Set<Element> {
+	const claimed = new Set<Element>()
+
+	for (const nested of container.querySelectorAll<Element>(`[${formAttribute}]`)) {
+		for (const input of nested.querySelectorAll(FIELDS)) {
+			claimed.add(input)
+		}
+	}
+
+	return claimed
+}
+
 export function getInputs(
 	container: Element,
-	hiddenAttribute = 'data-drift-hidden'
+	hiddenAttribute = 'data-drift-hidden',
+	formAttribute = 'data-drift-form'
 ): DriftInputElement[] {
-	const inputs = container.querySelectorAll<DriftInputElement>('input, textarea, select')
+	const inputs = container.querySelectorAll<DriftInputElement>(FIELDS)
+	const claimed = claimedByNested(container, formAttribute)
 
-	return Array.from(inputs).filter(input => input.name && !input.hasAttribute(hiddenAttribute))
+	return Array.from(inputs).filter(
+		input => input.name && !input.hasAttribute(hiddenAttribute) && !claimed.has(input)
+	)
 }
 
 /**

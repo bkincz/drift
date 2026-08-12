@@ -362,3 +362,188 @@ describe('DriftObserver - Edge Cases', () => {
 		expect(fields[0].name).toBe('deepField')
 	})
 })
+
+/*
+ *   SINGLE REGISTRATION TESTS
+ ***************************************************************************************************/
+describe('DriftObserver - Single registration', () => {
+	it('announces a form once when its wrapper and itself arrive together', async () => {
+		observer.observe(container)
+
+		const wrapper = document.createElement('div')
+		container.appendChild(wrapper)
+		wrapper.appendChild(createForm('once', '<input name="email" />'))
+
+		await waitForMutations()
+
+		expect(callbacks.onFormAdded).toHaveBeenCalledTimes(1)
+		expect(callbacks.onFormAdded).toHaveBeenCalledWith(expect.any(HTMLFormElement), 'once')
+	})
+
+	it('announces each field once', async () => {
+		observer.observe(container)
+
+		const wrapper = document.createElement('div')
+		container.appendChild(wrapper)
+		wrapper.appendChild(createForm('once', '<input name="email" /><input name="name" />'))
+
+		await waitForMutations()
+
+		const announced = vi
+			.mocked(callbacks.onFieldsAdded)
+			.mock.calls.flatMap(([fields]) => fields.map(field => field.name))
+
+		expect(announced).toEqual(['email', 'name'])
+	})
+
+	it('leaves a form alone on a later scan of the same element', async () => {
+		const form = createForm('stable', '<input name="email" />')
+		container.appendChild(form)
+		observer.observe(container)
+
+		observer.rescan()
+		observer.rescan()
+
+		expect(callbacks.onFormAdded).toHaveBeenCalledTimes(1)
+	})
+})
+
+/*
+ *   NESTED FIELD TESTS
+ ***************************************************************************************************/
+describe('DriftObserver - Fields inside an added subtree', () => {
+	it('finds a field added inside a wrapper rather than straight onto the form', async () => {
+		const form = createForm('myForm')
+		container.appendChild(form)
+		observer.observe(container)
+
+		const wrapper = document.createElement('div')
+		wrapper.innerHTML = '<input name="wrapped" type="text" />'
+		form.appendChild(wrapper)
+
+		await waitForMutations()
+
+		expect(callbacks.onFieldsAdded).toHaveBeenCalledWith(
+			[expect.objectContaining({ name: 'wrapped' })],
+			form,
+			'myForm'
+		)
+	})
+
+	it('still ignores a hidden field arriving the same way', async () => {
+		const form = createForm('myForm')
+		container.appendChild(form)
+		observer.observe(container)
+
+		const wrapper = document.createElement('div')
+		wrapper.innerHTML = '<input name="secret" data-drift-hidden />'
+		form.appendChild(wrapper)
+
+		await waitForMutations()
+
+		expect(callbacks.onFieldsAdded).not.toHaveBeenCalled()
+	})
+})
+
+/*
+ *   NON-FORM CONTAINER TESTS
+ ***************************************************************************************************/
+describe('DriftObserver - Containers that are not forms', () => {
+	it('announces a container once when its wrapper and itself arrive together', async () => {
+		observer.observe(container)
+
+		const wrapper = document.createElement('div')
+		container.appendChild(wrapper)
+
+		const box = document.createElement('div')
+		box.setAttribute('data-drift-form', 'checkout')
+		box.innerHTML = '<input name="card_number" />'
+		wrapper.appendChild(box)
+
+		await waitForMutations()
+
+		expect(callbacks.onFormAdded).toHaveBeenCalledTimes(1)
+		expect(callbacks.onFormAdded).toHaveBeenCalledWith(box, 'checkout')
+	})
+
+	it('finds a field added inside a wrapper within one', async () => {
+		const box = document.createElement('div')
+		box.setAttribute('data-drift-form', 'checkout')
+		container.appendChild(box)
+		observer.observe(container)
+
+		const wrapper = document.createElement('div')
+		wrapper.innerHTML = '<input name="wrapped" type="text" />'
+		box.appendChild(wrapper)
+
+		await waitForMutations()
+
+		expect(callbacks.onFieldsAdded).toHaveBeenCalledWith(
+			[expect.objectContaining({ name: 'wrapped' })],
+			box,
+			'checkout'
+		)
+	})
+
+	it('announces each field of a container once', async () => {
+		observer.observe(container)
+
+		const wrapper = document.createElement('div')
+		container.appendChild(wrapper)
+
+		const box = document.createElement('div')
+		box.setAttribute('data-drift-form', 'checkout')
+		box.innerHTML = '<input name="card_number" /><input name="cvc" />'
+		wrapper.appendChild(box)
+
+		await waitForMutations()
+
+		const announced = vi
+			.mocked(callbacks.onFieldsAdded)
+			.mock.calls.flatMap(([fields]) => fields.map(field => field.name))
+
+		expect(announced).toEqual(['card_number', 'cvc'])
+	})
+})
+
+/*
+ *   NESTED CONTAINER TESTS
+ ***************************************************************************************************/
+describe('DriftObserver - Nested containers', () => {
+	it('announces each field to the container nearest it', () => {
+		container.innerHTML =
+			'<div data-drift-form="outer"><input name="a" />' +
+			'<div data-drift-form="inner"><input name="b" /></div></div>'
+
+		observer.observe(container)
+
+		const announced = vi
+			.mocked(callbacks.onFieldsAdded)
+			.mock.calls.flatMap(([fields, , formKey]) =>
+				fields.map(field => `${formKey}:${field.name}`)
+			)
+
+		expect(announced).toEqual(['outer:a', 'inner:b'])
+	})
+
+	it('keeps them apart when the inner one arrives later', async () => {
+		container.innerHTML = '<div data-drift-form="outer"><input name="a" /></div>'
+		observer.observe(container)
+
+		const outer = container.querySelector('[data-drift-form="outer"]')!
+		const inner = document.createElement('div')
+		inner.setAttribute('data-drift-form', 'inner')
+		inner.innerHTML = '<input name="b" />'
+		outer.appendChild(inner)
+
+		await waitForMutations()
+
+		const announced = vi
+			.mocked(callbacks.onFieldsAdded)
+			.mock.calls.flatMap(([fields, , formKey]) =>
+				fields.map(field => `${formKey}:${field.name}`)
+			)
+
+		expect(announced).toEqual(['outer:a', 'inner:b'])
+	})
+})

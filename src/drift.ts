@@ -1,7 +1,7 @@
 /*
  *   IMPORTS
  ***************************************************************************************************/
-import { StateMachine } from '@bkincz/clutch'
+import { DriftStore } from './store'
 import { DriftObserver } from './observer'
 import { SchemaRegistry } from './registry'
 import { DriftEventEmitter } from './emitter'
@@ -9,7 +9,6 @@ import { getInputValue, setInputValue, isEmpty } from './input'
 import { setNestedValue, getNestedValue } from './parser'
 import type {
 	DriftConfig,
-	DriftState,
 	DriftFormState,
 	DriftSchema,
 	DriftInputElement,
@@ -20,11 +19,6 @@ import type {
 	DriftEventListener,
 	ValidationTrigger,
 } from './types'
-
-/*
- *   INTERNAL CLASSES
- ***************************************************************************************************/
-class DriftStateMachine extends StateMachine<DriftState> {}
 
 /*
  *   CONSTANTS
@@ -69,7 +63,7 @@ export class Drift {
 	private config: Required<Omit<DriftConfig, 'defaultValidateOn'>> & {
 		defaultValidateOn?: ValidationTrigger
 	}
-	private state: DriftStateMachine
+	private state: DriftStore
 	private observer: DriftObserver
 	private registry: SchemaRegistry
 	private emitter: DriftEventEmitter = new DriftEventEmitter()
@@ -84,10 +78,9 @@ export class Drift {
 	constructor(config: DriftConfig = {}) {
 		this.config = { ...DEFAULT_CONFIG, ...config }
 
-		this.state = new DriftStateMachine({
+		this.state = new DriftStore({
 			initialState: { forms: {} },
-			enablePersistence: this.config.persist,
-			persistenceKey: 'drift-form-state',
+			persistKey: this.config.persist ? 'drift-form-state' : undefined,
 		})
 
 		this.registry = new SchemaRegistry()

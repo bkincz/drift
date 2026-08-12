@@ -7,6 +7,10 @@
 
 A DOM-driven form library that automatically tracks forms and fields based on their presence in the DOM.
 
+Zero runtime dependencies, no peers to install alongside it. The state behind a form is small
+enough to own outright, so Drift does: `DriftStore` copies a form the first time a change reaches
+for one and hands back the originals for every form it did not touch.
+
 ```bash
 npm install @bkincz/drift
 ```
@@ -280,8 +284,9 @@ drift.on('form:register', (event) => { ... })
 
 ## Performance
 
-- **Lightweight**: ~20KB minified, ~5KB gzipped
+- **Lightweight**: ~25KB minified, ~6KB gzipped, and nothing else comes with it
 - **Efficient observation**: Debounced MutationObserver
+- **Structural sharing**: A change to one form leaves every other form's identity alone
 - **Minimal overhead**: Only tracks visible, named inputs
 
 ## TypeScript

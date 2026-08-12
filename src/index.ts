@@ -2,6 +2,7 @@
  *   EXPORTS
  ***************************************************************************************************/
 export { Drift } from './drift'
+export { DriftStore } from './store'
 export { SchemaRegistry } from './registry'
 export { DriftEventEmitter } from './emitter'
 export { getInputValue, setInputValue, isEmpty } from './input'
@@ -11,6 +12,8 @@ export { parseFieldName, setNestedValue, getNestedValue, deleteNestedValue } fro
 /*
  *   TYPE EXPORTS
  ***************************************************************************************************/
+export type { DriftStoreConfig, DriftStoreListener } from './store'
+
 export type {
 	DriftConfig,
 	DriftState,

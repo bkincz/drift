@@ -2,7 +2,7 @@
  *   IMPORTS
  ***************************************************************************************************/
 import type { DriftInputElement } from './types'
-import { getInputs, isHidden } from './visibility'
+import { getInputs } from './visibility'
 
 /*
  *   TYPES
@@ -142,17 +142,8 @@ export class DriftObserver {
 			this.registerForm(node, formKey)
 		}
 
-		if (this.isInputElement(node)) {
-			const form = this.findParentForm(node)
-			if (form && node.name && !isHidden(node, this.config.hiddenAttribute)) {
-				const formKey = this.trackedForms.get(form)
-				if (formKey) {
-					this.registerField(node, form, formKey)
-				}
-			}
-		}
-
 		this.scanForForms(node)
+		this.collectFields()
 	}
 
 	private handleNodeRemoved(node: Node): void {
@@ -174,17 +165,37 @@ export class DriftObserver {
 	}
 
 	private scanForForms(root: Element): void {
-		if (root.hasAttribute(this.config.formAttribute) && !this.trackedForms.has(root)) {
-			const formKey = root.getAttribute(this.config.formAttribute)!
-			this.registerForm(root, formKey)
+		if (root.hasAttribute(this.config.formAttribute)) {
+			this.registerForm(root, root.getAttribute(this.config.formAttribute)!)
 		}
 
 		const containers = root.querySelectorAll<Element>(`[${this.config.formAttribute}]`)
+
 		for (const container of containers) {
-			const formKey = container.getAttribute(this.config.formAttribute)!
-			if (!this.trackedForms.has(container)) {
-				this.registerForm(container, formKey)
+			this.registerForm(container, container.getAttribute(this.config.formAttribute)!)
+		}
+	}
+
+	private collectFields(): void {
+		for (const [container, formKey] of this.trackedForms) {
+			this.announceNewFields(container, formKey)
+		}
+	}
+
+	private announceNewFields(container: Element, formKey: string): void {
+		const newFields: DriftInputElement[] = []
+
+		const inputs = getInputs(container, this.config.hiddenAttribute, this.config.formAttribute)
+
+		for (const input of inputs) {
+			if (!this.trackedFields.has(input)) {
+				this.trackedFields.set(input, { form: container, formKey })
+				newFields.push(input)
 			}
+		}
+
+		if (newFields.length > 0) {
+			this.callbacks.onFieldsAdded(newFields, container, formKey)
 		}
 	}
 
@@ -207,22 +218,12 @@ export class DriftObserver {
 	}
 
 	private registerForm(form: Element, formKey: string): void {
-		this.trackedForms.set(form, formKey)
-		this.callbacks.onFormAdded(form, formKey)
-
-		const inputs = getInputs(form, this.config.hiddenAttribute)
-		const newFields: DriftInputElement[] = []
-
-		for (const input of inputs) {
-			if (!this.trackedFields.has(input)) {
-				this.trackedFields.set(input, { form, formKey })
-				newFields.push(input)
-			}
+		if (!this.trackedForms.has(form)) {
+			this.trackedForms.set(form, formKey)
+			this.callbacks.onFormAdded(form, formKey)
 		}
 
-		if (newFields.length > 0) {
-			this.callbacks.onFieldsAdded(newFields, form, formKey)
-		}
+		this.announceNewFields(form, formKey)
 	}
 
 	private unregisterForm(form: Element, formKey: string): void {
@@ -237,31 +238,9 @@ export class DriftObserver {
 		this.callbacks.onFormRemoved(form, formKey)
 	}
 
-	private registerField(field: DriftInputElement, form: Element, formKey: string): void {
-		if (this.trackedFields.has(field)) {
-			return
-		}
-
-		this.trackedFields.set(field, { form, formKey })
-		this.callbacks.onFieldsAdded([field], form, formKey)
-	}
-
 	private unregisterField(field: DriftInputElement, form: Element, formKey: string): void {
 		this.trackedFields.delete(field)
 		this.callbacks.onFieldRemoved(field, form, formKey)
-	}
-
-	private findParentForm(element: Element): Element | null {
-		let current: Element | null = element
-
-		while (current) {
-			if (current.hasAttribute(this.config.formAttribute)) {
-				return this.trackedForms.has(current) ? current : null
-			}
-			current = current.parentElement
-		}
-
-		return null
 	}
 
 	private isInputElement(element: Element): element is DriftInputElement {

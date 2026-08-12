@@ -11,7 +11,6 @@ export default defineConfig({
 		dts({
 			include: ['src/**/*'],
 			exclude: ['src/__tests__/**', 'src/**/*.test.*', 'src/test/**'],
-			rollupTypes: true,
 			tsconfigPath: './tsconfig.lib.json',
 		}),
 	],
@@ -21,15 +20,6 @@ export default defineConfig({
 			name: 'Drift',
 			fileName: 'drift',
 			formats: ['es', 'umd'],
-		},
-		rollupOptions: {
-			external: ['@bkincz/clutch', 'immer'],
-			output: {
-				globals: {
-					'@bkincz/clutch': 'Clutch',
-					immer: 'immer',
-				},
-			},
 		},
 	},
 	resolve: {
