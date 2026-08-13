@@ -2,29 +2,32 @@ name: CI
 
 on:
     push:
-        branches: [master, main, develop]
+        branches: [main]
     pull_request:
-        branches: [master, main, develop]
+        branches: [main]
+
+permissions:
+    contents: read
 
 jobs:
     test:
         name: Test
-        runs-on: ubuntu-latest
+        runs-on: ${{ matrix.os }}
         strategy:
+            fail-fast: false
             matrix:
-                node-version: [20, 22]
+                os: [ubuntu-latest, windows-latest]
+                node-version: [22, 24]
 
         steps:
             - name: Checkout
-              uses: actions/checkout@v4
+              uses: actions/checkout@v7
 
             - name: Setup pnpm
-              uses: pnpm/action-setup@v4
-              with:
-                  version: 9
+              uses: pnpm/action-setup@v6
 
             - name: Setup Node.js ${{ matrix.node-version }}
-              uses: actions/setup-node@v4
+              uses: actions/setup-node@v6
               with:
                   node-version: ${{ matrix.node-version }}
                   cache: 'pnpm'
@@ -41,16 +44,15 @@ jobs:
             - name: Format check
               run: pnpm run format:check
 
-            - name: Test
-              run: pnpm run test:run
-
-            - name: Test coverage
+            - name: Test (with coverage)
               run: pnpm run test:coverage
 
-            - name: Upload coverage reports to Codecov
-              uses: codecov/codecov-action@v5
+            - name: Upload coverage to Codecov
+              if: matrix.os == 'ubuntu-latest' && matrix.node-version == 24
+              uses: codecov/codecov-action@v7
               with:
                   token: ${{ secrets.CODECOV_TOKEN }}
+                  files: ./coverage/lcov.info
                   fail_ci_if_error: false
 
     build:
@@ -60,17 +62,15 @@ jobs:
 
         steps:
             - name: Checkout
-              uses: actions/checkout@v4
+              uses: actions/checkout@v7
 
             - name: Setup pnpm
-              uses: pnpm/action-setup@v4
-              with:
-                  version: 9
+              uses: pnpm/action-setup@v6
 
             - name: Setup Node.js
-              uses: actions/setup-node@v4
+              uses: actions/setup-node@v6
               with:
-                  node-version: 22
+                  node-version: 24
                   cache: 'pnpm'
 
             - name: Install dependencies
@@ -79,9 +79,102 @@ jobs:
             - name: Build
               run: pnpm run build
 
+            - name: Size limit
+              run: pnpm run size
+
             - name: Upload build artifacts
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: dist
                   path: dist
                   retention-days: 7
+
+    smoke:
+        name: Smoke (pack + resolve exports)
+        runs-on: ubuntu-latest
+        needs: test
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v6
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v6
+              with:
+                  node-version: 24
+                  cache: 'pnpm'
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Build
+              run: pnpm run build
+
+            - name: Pack the tarball
+              run: pnpm pack --pack-destination "$RUNNER_TEMP"
+
+            - name: Install the tarball into a bare consumer
+              working-directory: ${{ runner.temp }}
+              run: |
+                  mkdir -p consumer && cd consumer
+                  npm init -y > /dev/null
+                  npm pkg set type=module
+                  npm install "$RUNNER_TEMP"/bkincz-drift-*.tgz
+
+            - name: Import every export, ESM and CJS
+              working-directory: ${{ runner.temp }}/consumer
+              run: |
+                  node --input-type=module -e '
+                    const { Drift, DriftStore, setNestedValue, getNestedValue } = await import("@bkincz/drift")
+
+                    new Drift()
+
+                    const store = new DriftStore({ initialState: { forms: {} } })
+                    store.mutate(draft => { draft.forms.login = { values: {} } })
+                    if (store.getState().forms.login === undefined) throw new Error("store lost the form")
+
+                    const values = setNestedValue({}, "items[0].name", "Ada")
+                    if (getNestedValue(values, "items[0].name") !== "Ada") {
+                      throw new Error("nested value did not round-trip: " + JSON.stringify(values))
+                    }
+                  '
+                  node -e '
+                    const drift = require("@bkincz/drift")
+                    if (typeof drift.Drift !== "function") throw new Error("no Drift export from CJS")
+                  '
+
+            - name: Type-check against the tarball
+              working-directory: ${{ runner.temp }}/consumer
+              run: |
+                  npm install typescript@5 @types/node
+                  cat > index.ts <<'TS'
+                  import {
+                      Drift,
+                      DriftStore,
+                      getInputs,
+                      setNestedValue,
+                      type DriftFormState,
+                      type DriftSchema,
+                      type ValidationResult,
+                  } from '@bkincz/drift'
+
+                  const drift = new Drift({ defaultValidateOn: 'blur' })
+                  const store = new DriftStore({ initialState: { forms: {} } })
+
+                  const schema: DriftSchema = {
+                      validate: (): ValidationResult => ({ success: true }),
+                  }
+
+                  export type Exports = [
+                      typeof drift.getForm,
+                      typeof store.mutate,
+                      typeof getInputs,
+                      typeof setNestedValue,
+                      typeof schema,
+                      DriftFormState,
+                  ]
+                  TS
+                  npx tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target es2022 --lib es2022,dom index.ts

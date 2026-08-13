@@ -2,8 +2,8 @@
  *   IMPORTS
  ***************************************************************************************************/
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { DriftStore } from '../store'
-import type { DriftFormState, DriftState } from '../types'
+import { DriftStore } from '../store.js'
+import type { DriftFormState, DriftState } from '../types.js'
 
 /*
  *   TEST SETUP
@@ -262,7 +262,7 @@ describe('DriftStore - Persistence', () => {
 	it('reads what a previous session left behind', () => {
 		localStorage.setItem(
 			PERSIST_KEY,
-			JSON.stringify({ forms: { login: { ...emptyForm(), values: { email: 'a@b.com' } } } }),
+			JSON.stringify({ forms: { login: { ...emptyForm(), values: { email: 'a@b.com' } } } })
 		)
 
 		const persisted = new DriftStore({

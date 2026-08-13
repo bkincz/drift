@@ -1,12 +1,12 @@
 /*
  *   IMPORTS
  ***************************************************************************************************/
-import { DriftStore } from './store'
-import { DriftObserver } from './observer'
-import { SchemaRegistry } from './registry'
-import { DriftEventEmitter } from './emitter'
-import { getInputValue, setInputValue, isEmpty } from './input'
-import { setNestedValue, getNestedValue } from './parser'
+import { DriftStore } from './store.js'
+import { DriftObserver } from './observer.js'
+import { SchemaRegistry } from './registry.js'
+import { DriftEventEmitter } from './emitter.js'
+import { getInputValue, setInputValue, isEmpty } from './input.js'
+import { setNestedValue, getNestedValue } from './parser.js'
 import type {
 	DriftConfig,
 	DriftFormState,
@@ -18,7 +18,7 @@ import type {
 	DriftEvent,
 	DriftEventListener,
 	ValidationTrigger,
-} from './types'
+} from './types.js'
 
 /*
  *   CONSTANTS

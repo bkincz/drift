@@ -1,5 +1,12 @@
 allowBuilds:
-  esbuild: true
+    esbuild: true
 
 overrides:
-  vite-plugin-dts>vite: npm:rolldown-vite@7.2.5
+    vite-plugin-dts>vite: npm:rolldown-vite@7.3.1
+    '@microsoft/api-extractor>minimatch': '>=10.2.3'
+    '@microsoft/api-extractor>lodash': '>=4.17.24'
+    '@rushstack/node-core-library>ajv': '>=8.18.0'
+    rollup: '>=4.59.0'
+
+# 3 days, in minutes.
+minimumReleaseAge: 4320

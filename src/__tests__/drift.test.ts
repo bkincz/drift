@@ -2,8 +2,8 @@
  *   IMPORTS
  ***************************************************************************************************/
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { Drift } from '../drift'
-import type { DriftSchema } from '../types'
+import { Drift } from '../drift.js'
+import type { DriftSchema } from '../types.js'
 
 /*
  *   TEST SETUP

@@ -2,8 +2,8 @@
  *   IMPORTS
  ***************************************************************************************************/
 import { describe, it, expect, beforeEach } from 'vitest'
-import { SchemaRegistry } from '../registry'
-import type { DriftSchema, DriftFieldSchema } from '../types'
+import { SchemaRegistry } from '../registry.js'
+import type { DriftSchema, DriftFieldSchema } from '../types.js'
 
 /*
  *   TEST SETUP

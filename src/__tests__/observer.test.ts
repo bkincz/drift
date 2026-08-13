@@ -2,8 +2,11 @@
  *   IMPORTS
  ***************************************************************************************************/
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { DriftObserver } from '../observer'
-import type { DriftObserverCallbacks, DriftObserverConfig } from '../observer'
+import {
+	DriftObserver,
+	type DriftObserverCallbacks,
+	type DriftObserverConfig,
+} from '../observer.js'
 
 /*
  *   TEST SETUP

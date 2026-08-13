@@ -2,7 +2,7 @@
  *   IMPORTS
  ***************************************************************************************************/
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { getInputs, isInDOM, isHidden } from '../visibility'
+import { getInputs, isInDOM, isHidden } from '../visibility.js'
 
 /*
  *   TEST SETUP
@@ -167,8 +167,7 @@ describe('getInputs - Nested containers', () => {
 	it('leaves a nested container its own fields', () => {
 		const outer = document.createElement('div')
 		outer.setAttribute('data-drift-form', 'outer')
-		outer.innerHTML =
-			'<input name="a" /><div data-drift-form="inner"><input name="b" /></div>'
+		outer.innerHTML = '<input name="a" /><div data-drift-form="inner"><input name="b" /></div>'
 
 		expect(getInputs(outer).map(input => input.name)).toEqual(['a'])
 	})
@@ -176,8 +175,7 @@ describe('getInputs - Nested containers', () => {
 	it('gives the nested container the fields the outer one let go', () => {
 		const outer = document.createElement('div')
 		outer.setAttribute('data-drift-form', 'outer')
-		outer.innerHTML =
-			'<input name="a" /><div data-drift-form="inner"><input name="b" /></div>'
+		outer.innerHTML = '<input name="a" /><div data-drift-form="inner"><input name="b" /></div>'
 		const inner = outer.querySelector('[data-drift-form="inner"]')!
 
 		expect(getInputs(inner).map(input => input.name)).toEqual(['b'])

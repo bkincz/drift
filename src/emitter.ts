@@ -1,7 +1,7 @@
 /*
  *   EVENT EMITTER
  ***************************************************************************************************/
-import type { DriftEvent, DriftEventListener } from './types'
+import type { DriftEvent, DriftEventListener } from './types.js'
 
 export class DriftEventEmitter {
 	private eventListeners: Map<string, Set<DriftEventListener>> = new Map()

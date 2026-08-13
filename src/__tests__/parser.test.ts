@@ -2,7 +2,7 @@
  *   IMPORTS
  ***************************************************************************************************/
 import { describe, it, expect } from 'vitest'
-import { parseFieldName, setNestedValue, getNestedValue, deleteNestedValue } from '../parser'
+import { parseFieldName, setNestedValue, getNestedValue, deleteNestedValue } from '../parser.js'
 
 /*
  *   PARSE FIELD NAME TESTS
