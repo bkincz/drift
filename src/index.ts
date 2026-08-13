@@ -1,18 +1,18 @@
 /*
  *   EXPORTS
  ***************************************************************************************************/
-export { Drift } from './drift'
-export { DriftStore } from './store'
-export { SchemaRegistry } from './registry'
-export { DriftEventEmitter } from './emitter'
-export { getInputValue, setInputValue, isEmpty } from './input'
-export { getInputs, isInDOM, isHidden } from './visibility'
-export { parseFieldName, setNestedValue, getNestedValue, deleteNestedValue } from './parser'
+export { Drift } from './drift.js'
+export { DriftStore } from './store.js'
+export { SchemaRegistry } from './registry.js'
+export { DriftEventEmitter } from './emitter.js'
+export { getInputValue, setInputValue, isEmpty } from './input.js'
+export { getInputs, isInDOM, isHidden } from './visibility.js'
+export { parseFieldName, setNestedValue, getNestedValue, deleteNestedValue } from './parser.js'
 
 /*
  *   TYPE EXPORTS
  ***************************************************************************************************/
-export type { DriftStoreConfig, DriftStoreListener } from './store'
+export type { DriftStoreConfig, DriftStoreListener } from './store.js'
 
 export type {
 	DriftConfig,
@@ -31,4 +31,4 @@ export type {
 	DriftEventListener,
 	DriftFieldMeta,
 	DriftFormMeta,
-} from './types'
+} from './types.js'

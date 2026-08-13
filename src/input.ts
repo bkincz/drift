@@ -1,7 +1,7 @@
 /*
  *   INPUT UTILITIES
  ***************************************************************************************************/
-import type { DriftInputElement } from './types'
+import type { DriftInputElement } from './types.js'
 
 export function getInputValue(element: DriftInputElement): unknown {
 	if (element instanceof HTMLInputElement) {

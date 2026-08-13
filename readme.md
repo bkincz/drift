@@ -7,9 +7,7 @@
 
 A DOM-driven form library that automatically tracks forms and fields based on their presence in the DOM.
 
-Zero runtime dependencies, no peers to install alongside it. The state behind a form is small
-enough to own outright, so Drift does: `DriftStore` copies a form the first time a change reaches
-for one and hands back the originals for every form it did not touch.
+Zero runtime dependencies and no peers.
 
 ```bash
 npm install @bkincz/drift
@@ -56,7 +54,7 @@ drift.onSubmit('login', async (values) => {
 
 ### Automatic Registration
 
-Forms and fields are tracked automatically based on DOM presence. The `data-drift-form` attribute can be placed on any element — `<form>`, `<div>`, `<section>`, etc.
+Forms and fields are tracked automatically based on DOM presence. The `data-drift-form` attribute works on any element: `<form>`, `<div>`, `<section>`.
 
 ```html
 <!-- Field in DOM = registered -->
@@ -89,7 +87,7 @@ Resolves to:
 
 ### Schema Validation
 
-Register schemas with configurable validation timing. `validateOn` is optional per field — set a form-wide default via config instead.
+Register schemas with configurable validation timing. `validateOn` is optional per field. Set a form-wide default in the config instead.
 
 ```typescript
 const drift = new Drift({ defaultValidateOn: 'blur' })
@@ -121,7 +119,7 @@ drift.registerSchema('signup', {
 })
 ```
 
-Fields with active errors revalidate on any value change, including programmatic updates from JavaScript. This means linked fields — where one field's value is derived from another — will clear their errors automatically without any extra wiring.
+Fields with active errors revalidate on any value change, including programmatic updates from JavaScript. Linked fields, where one value is derived from another, clear their errors without extra wiring.
 
 A field validator may return errors for other fields. This is useful for cross-field rules like password confirmation:
 
@@ -140,7 +138,7 @@ fields: {
 
 ### Initial Values
 
-Seed a form with data — useful for edit forms. Fields seeded this way are not considered dirty, and `resetForm` restores to these values.
+Seed a form with data, for edit forms. Seeded fields are not dirty, and `resetForm` restores to these values.
 
 ```typescript
 drift.setInitialValues('profile', {
@@ -282,16 +280,13 @@ drift.on('form:register', (event) => { ... })
 - `validation:start` / `validation:end`
 - `submit:start` / `submit:end`
 
-## Performance
+## Size
 
-- **Lightweight**: ~25KB minified, ~6KB gzipped, and nothing else comes with it
-- **Efficient observation**: Debounced MutationObserver
-- **Structural sharing**: A change to one form leaves every other form's identity alone
-- **Minimal overhead**: Only tracks visible, named inputs
+Around 5 kB brotli, with no dependencies.
 
 ## TypeScript
 
-Fully typed with exports for all interfaces.
+Types for every public interface are exported from the package root.
 
 ```typescript
 import type {

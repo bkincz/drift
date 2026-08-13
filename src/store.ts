@@ -1,7 +1,7 @@
 /*
  *   IMPORTS
  ***************************************************************************************************/
-import type { DriftFormState, DriftState } from './types'
+import type { DriftFormState, DriftState } from './types.js'
 
 /*
  *   TYPES

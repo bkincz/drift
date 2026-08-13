@@ -1,8 +1,8 @@
 /*
  *   IMPORTS
  ***************************************************************************************************/
-import type { DriftInputElement } from './types'
-import { getInputs } from './visibility'
+import type { DriftInputElement } from './types.js'
+import { getInputs } from './visibility.js'
 
 /*
  *   TYPES

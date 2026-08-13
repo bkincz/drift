@@ -1,7 +1,7 @@
 /*
  *   IMPORTS
  ***************************************************************************************************/
-import type { DriftSchema, ValidationResult, DriftFieldSchema } from './types'
+import type { DriftSchema, ValidationResult, DriftFieldSchema } from './types.js'
 
 /*
  *   SCHEMA REGISTRY CLASS
